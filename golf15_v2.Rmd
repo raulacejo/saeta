@@ -1,0 +1,682 @@
+---
+title: "Golf 2015"
+author: "Raúl Acejo - SAETA"
+date: "14 de junio de 2016"
+output: pdf_document
+---
+
+#Descripción#
+
+Este documento recoge la explotación en R de la encuesta Segmento de Golf en Andalucía del año 2015. Hasta ahora se venía recibiendo la información en tablas de SPSS y Access, y se explotaba en SPSS. Esto es una prueba piloto para la utilización de R en el proceso completo de explotar la información, generar las variables necesarias y obtener las tablas adecuadas para la redacción del informe.
+
+#Lectura, depuración y adecuación de microdatos#
+
+Partimos de la tabla de datos en SPSS, la convertimos en un archivo de texto separado por comas, aunque realmente los separadores que usa SPSS en la exportación son ; (golf15.csv). No se exportan las variables creadas en el proceso SPSS, solo las originales.
+
+Antes de cargar los paquetes, ampliamos la memoria de Java para poder exportar a Excel las tablas sin incidencias:
+
+```{r}
+
+options(java.parameters = "-Xmx16000m")
+
+# http://stackoverflow.com/questions/21937640/handling-java-lang-outofmemoryerror-when-writing-to-excel-from-r
+
+```
+
+Cargamos los paquetes que nos harán falta en la explotación:
+
+```{r}
+
+library(data.table)
+library(dplyr)
+library(xlsx)
+
+```
+
+Cargamos también una función que nos permite exportar varios objetos de R (ej: tablas) a Excel.
+https://statmethods.wordpress.com/2014/06/19/quickly-export-multiple-r-objects-to-an-excel-workbook/
+
+```{r}
+save.xlsx <- function (file, ...)
+  {
+      require(xlsx, quietly = TRUE)
+      objects <- list(...)
+      fargs <- as.list(match.call(expand.dots = TRUE))
+      objnames <- as.character(fargs)[-c(1, 2)]
+      nobjects <- length(objects)
+      for (i in 1:nobjects) {
+          if (i == 1)
+              write.xlsx(objects[[i]], file, sheetName = objnames[i])
+          else write.xlsx(objects[[i]], file, sheetName = objnames[i],
+              append = TRUE)
+      }
+      print(paste("Workbook", file, "has", nobjects, "worksheets."))
+}
+
+```
+
+Guardamos en un dataset (golf) el archivo de datos, usando la función `read.csv`:
+
+```{r}
+golf <- read.csv("Z:/SAETA/Segmentos/Sistema Actualizacion Anual/2015/Golf/golf15.csv", header = TRUE, sep = ";",dec = ",")
+```
+
+El segundo paso es renombrar y establecer el tipo correcto de cada variable. 
+
+```{r}
+
+#Primero establecemos los tipos de variables
+
+attach(golf)
+
+golf$CONTADOR <- as.numeric(CONTADOR)
+golf$Segmento <- as.numeric(Segmento)
+golf$ID <- as.character(ID)
+golf$CodPto <- as.character(CodPto)         
+golf$DescPto <- as.character(DescPto)     
+golf$Encuestador <- as.numeric(Encuestador)   
+golf$FECHA <- as.Date(FECHA, format = "%d/%m/%Y")        
+golf$HORAENTREVISTA <- as.character(HORAENTREVISTA)
+golf$Enc_Conteo  <- factor(Enc_Conteo, levels = c(1,2), 
+                           labels = c("Registro de Encuesta", "Registro de Conteo"))
+golf$TVisitante <- factor(TVisitante, levels = c(1,2,3), 
+                          labels = c("Residente", "Excursionista", "Turista"))
+golf$Resp01 <- factor(Resp01, levels = c(1,2), labels =c("Si", "No"))
+golf$Resp01_A <- factor(Resp01_A, levels = c(1,2), labels =c("Si", "No"))
+golf$Resp02_1 <- factor(Resp02_1, levels = c(1,2,3,4,5,6,7,8,9,10,11), 
+                        labels =c("Sol y playa", "Cultural", "Naturaleza",
+                                  "Amigos y familiares","Golf", "Camping", 
+                                  "Salud y belleza", "Negocios y reuniones", 
+                                  "Nautico", "Cruceros", "Otros"))
+golf$Resp02_2   <- factor(Resp02_2, levels = c(1,2,3,4,5,6,7,8,9,10,11), 
+                          labels =c("Sol y playa", "Cultural", "Naturaleza", 
+                                    "Amigos y familiares", "Golf", "Camping", 
+                                    "Salud y belleza", "Negocios y reuniones", 
+                                    "Nautico", "Cruceros", "Otros"))
+golf$Resp02_Otro <- as.character(Resp02_Otro)  
+golf$Resp03   <- factor(Resp03, levels = c(1,2,3,4,5,6,7,8,9,10,11,12,13), 
+                        labels =c("Andalucía", "Resto de España", "Alemania", 
+                                  "Francia", "Holanda", "Suecia", "Dinamarca", 
+                                  "Finlandia", "Noruega", "Reino Unido", "Irlanda", 
+                                  "Resto UE", "Otros"))
+golf$Resp03_Otros <- as.character(Resp03_Otros)  
+golf$MunResi  <- as.character(MunResi)   
+golf$UZonResi <- as.character(UZonResi) 
+golf$MunAnoche  <- as.character(MunAnoche)  
+golf$UZonPern <- as.character(UZonPern) 
+golf$Resp04 <- as.numeric(Resp04)  
+golf$Resp05 <- as.numeric(Resp05)    
+golf$Resp05_Moneda <- as.character(Resp05_Moneda)
+golf$Resp05_Personas <- as.numeric(Resp05_Personas)
+golf$Resp05_CANT1 <- as.numeric(Resp05_CANT1)
+golf$Resp05_CANT2 <- as.numeric(Resp05_CANT2)
+golf$Resp05_CANT3 <- as.numeric(Resp05_CANT3)
+golf$Resp05_CANT4 <- as.numeric(Resp05_CANT4)
+golf$Resp05_CANT5 <- as.numeric(Resp05_CANT5)
+golf$Resp05_CANT6 <- as.numeric(Resp05_CANT6)
+golf$Resp05_CANT7 <- as.numeric(Resp05_CANT7)
+golf$Resp05_Otro <- as.character(Resp05_Otro)
+golf$Resp06 <- as.numeric(Resp06)
+golf$Resp06_Moneda <- as.character(Resp06_Moneda)
+golf$Resp06_Personas <- as.numeric(Resp06_Personas)
+golf$Resp06_CANT1 <- as.numeric(Resp06_CANT1)
+golf$Resp06_CANT2 <- as.numeric(Resp06_CANT2)
+golf$Resp06_CANT3 <- as.numeric(Resp06_CANT3)
+golf$Resp06_CANT4 <- as.numeric(Resp06_CANT4)
+golf$Resp06_CANT5 <- as.numeric(Resp06_CANT5)  
+golf$Resp07 <- as.numeric(Resp07)    
+golf$Resp08_A1 <- as.numeric(Resp08_A1)     
+golf$Resp08_A2 <- as.numeric(Resp08_A2)
+golf$Resp08_A3 <- as.numeric(Resp08_A3)
+golf$Resp08_B <- factor(Resp08_B, levels = c(1,2), labels =c("Si", "No"))  
+golf$P09_OpNo <- factor(P09_OpNo, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Op2 <- factor(P09_Op2, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Op3 <- factor(P09_Op3, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Op4 <- factor(P09_Op4, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Op5 <- factor(P09_Op5, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Op6 <- factor(P09_Op6, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_OpOtros <- factor(P09_OpOtros, levels = c(1,2), labels =c("Si", "No"))
+golf$P09_Otros <- as.character(P09_Otros)
+golf$Resp10 <- factor(Resp10, levels = c(1,2), labels =c("Hombre", "Mujer"))
+
+detach(golf)
+
+#Despues renombramos a nuestros gusto, para lo que usamos la función setnames, 
+#del paquete data.table
+
+
+setnames(golf, old = c('CONTADOR','Segmento','ID','CodPto','DescPto','Encuestador',
+                       'FECHA','HORAENTREVISTA','Enc_Conteo','TVisitante','Resp01',
+                       'Resp01_A','Resp02_1','Resp02_2','Resp02_Otro','Resp03',
+                       'Resp03_Otros','MunResi','UZonResi','MunAnoche','UZonPern',
+                       'Resp04','Resp05','Resp05_Moneda','Resp05_Personas',
+                       'Resp05_CANT1','Resp05_CANT2','Resp05_CANT3','Resp05_CANT4',
+                       'Resp05_CANT5','Resp05_CANT6','Resp05_CANT7','Resp05_Otro',
+                       'Resp06','Resp06_Moneda','Resp06_Personas','Resp06_CANT1',
+                       'Resp06_CANT2','Resp06_CANT3','Resp06_CANT4','Resp06_CANT5',
+                       'Resp07','Resp08_A1','Resp08_A2','Resp08_A3','Resp08_B','P09_OpNo',
+                       'P09_Op2','P09_Op3','P09_Op4','P09_Op5',
+                       'P09_Op6','P09_OpOtros','P09_Otros','Resp10'), 
+         new = c('contador','segmento','id','codpunto','descpunto','encuestador',
+                 'fecha','hora','encuestado','tipovisitante','pernocto','primerdia',
+                 'motivo1','motivo2','otromotivo','residencia','residencia_otros',
+                 'municipio_res','zona_res','municipiopern','zonapern','pernoctaciones',
+                 'coste','coste_moneda','coste_personas','coste_transporte',
+                 'coste_alojamiento','coste_restauracion','coste_compras',
+                 'coste_greenfees','coste_paquete','coste_otros','coste_otro_es',
+                 'gastoayer','gastoayer_moneda','gastoayer_personas',
+                 'gastoayer_transporte','gastoayer_alojamiento','gastoayer_restauracion',
+                 'gastoayer_compras','gastoayer_greenfees','valoración','camposvisitados'
+                 ,'salidascampo','viajes','socio','usointernet','usointernet_transporte',
+                 'usointernet_alojamiento','usointernet_greenfees','usointernet_info',
+                 'usointernet_redes','usointernet_otros','usointernet_otros_es','sexo'))
+
+```
+
+Gracias al paquete `dplyr` realizamos la primera tabla:
+
+```{r}
+
+golf <- tbl_df(golf)
+
+# Total de encuestas y conteo
+
+encuestasyconteo <- golf %>%
+  group_by(encuestado) %>%
+  summarise(Cuestionarios = n())
+
+encuestasyconteo
+
+```
+
+Creamos una nueva variable que recoja el mes de realización de la encuesta:
+
+```{r}
+
+golf$mes <- month(golf$fecha)
+golf$mes <- factor(golf$mes, levels = c(4, 5, 9, 10), labels = c("Abr", "May", "Sep", "Oct"))
+
+```
+
+Y agrupamos las encuestas por meses:
+
+```{r}
+
+encuestasyconteoMeses <- golf %>%
+  group_by(mes) %>%
+  summarise(Encuestas = n())
+
+encuestasyconteoMeses
+
+```
+
+Creamos un nuevo dataset solo con los registros de encuestas, quitando los conteos y comprobamos el número de cuestionarios:
+
+```{r}
+
+golfen <- filter(golf, encuestado == "Registro de Encuesta")
+golfen <- tbl_df(golfen)
+
+attach(golfen)
+
+golfen %>%
+summarise(Cuestionarios = n())
+
+golfen %>%
+group_by(encuestado) %>%
+summarise(Cuestionarios = n())
+
+encuestasMeses <- golfen %>%
+group_by(mes) %>%
+summarise(Encuestas = n()) 
+
+encuestasMeses
+
+```
+
+Distribución de encuestas por puntos de encuestación y meses, para comprobar la muestra:
+
+```{r}
+
+encuestasMesesPuntos <- addmargins(table(descpunto, mes))
+encuestasMesesPuntos
+
+```
+
+#Explotación y tabulación de resultados#
+
+**País de residencia** 
+
+```{r}
+
+residencia <- golfen %>%
+group_by(residencia) %>%
+summarise(n = n()) %>%
+mutate(pct=100*n/sum(n))
+
+residencia
+
+```
+
+**Motivo principal del viaje**
+
+```{r}
+
+motivo1 <- golfen %>%
+group_by(motivo1) %>%
+summarise(n = n()) %>%
+mutate(pct=100*n/sum(n))
+
+motivo1
+
+```
+
+**Motivo secundario del viaje**
+
+```{r}
+
+motivo2 <- golfen %>%
+group_by(motivo2) %>%
+summarise(n = n()) %>%
+mutate(pct=100*n/sum(n))
+
+motivo2
+
+```
+
+**Estancia media total**
+
+```{r}
+
+# Sin filtro
+em <- mean(pernoctaciones)
+
+# Filtro = excluir mayores de 40
+em_f1 <- mean(pernoctaciones[pernoctaciones < 40])
+
+# Filtro = excluir mayores de 30
+em_f2 <- mean(pernoctaciones[pernoctaciones < 30])
+
+tabla_em <- as.data.frame(c(em, em_f1, em_f2), row.names = c("Sin filtro", "Filtro 1", "Filtro 2"))
+
+tabla_em
+
+```
+
+**Estancia media por residencia**
+
+```{r}
+
+em_residencia <- golfen %>%
+group_by(residencia) %>%
+summarise(EM = mean(pernoctaciones))
+
+em_residencia
+
+```
+
+**Valoración**
+
+```{r}
+
+valoración <- summarise(golfen, Valoración = mean(valoración))
+valoración
+
+
+```
+
+**Media de campos de golf visitados**
+
+```{r}
+
+campos <- summarise(golfen, Campos = mean(camposvisitados))
+campos
+
+```
+
+**Media de salidas a campo**
+
+```{r}
+
+#Sin filtro
+salidas <- summarise(golfen, Salidas = mean(salidascampo))
+
+#Filtro: excluimos mayores de 30
+salidas_f1 <- golfen %>%
+filter(salidascampo < 30) %>% 
+summarise(Salidas = mean(salidascampo))
+
+tabla_salidas <- as.data.frame(c(salidas, salidas_f1))
+tabla_salidas
+
+```
+
+** Número de viajes a Andalucía con motivo de golf en el año 2014 **
+
+```{r}
+
+viajes <- summarise(golfen, Viajes = mean(viajes))
+viajes
+
+```
+
+
+**Es socio de algún campo**
+
+```{r}
+
+socio <- golfen %>%
+group_by(socio) %>%
+summarise(Socio = n()) %>%
+mutate(pct=100*Socio/sum(Socio))
+socio
+
+```
+
+**Uso Internet**
+
+```{r}
+
+internet <- subset(golfen, select = c(usointernet,usointernet_transporte,
+                                      usointernet_alojamiento,usointernet_greenfees,
+                                      usointernet_info,usointernet_redes,
+                                      usointernet_otros))
+
+usointernet <- t(addmargins(mapply(table,internet)))
+usointernet
+
+```
+
+**Sexo**
+
+```{r}
+
+sexo <- golfen %>%
+group_by(sexo) %>%
+summarise(Sexo = n()) %>%
+mutate(pct=100*Sexo/sum(Sexo))
+sexo
+
+```
+
+**Cálculos de gasto**
+
+La idea es calcular simultáneamente el gasto con paquete y sin paquete. Para ello se realizan una serie de cálculos y ajustes. El paquete se ajusta restando el valor medio del transporte. 
+
+Primero, comprobamos que no hay duplicados en los conceptos de las preguntas de coste y gastoayer (P05 y P06).
+
+```{r}
+
+which(coste_transporte != 0 & gastoayer_transporte != 0) # aquí si pueden estar en ambos.
+which(coste_alojamiento != 0 & gastoayer_alojamiento != 0) 
+which(coste_restauracion != 0 & gastoayer_restauracion != 0) 
+which(coste_compras != 0 & gastoayer_compras != 0) 
+which(coste_greenfees != 0 & gastoayer_greenfees != 0) 
+
+```
+
+La partida de gasto en coste_transporte ("Transporte hasta su lugar de destino), solo hay que incluirlo en el caso de los turistas andaluces. Para el resto de nacionalidades se considera un gasto en orígen. 
+
+La partida de gasto en coste_paquete "Paquete turístico" hay que quitarle el transporte. Para ello estimamos precio medio de transporte por procedencia y restamos.
+
+Veámos el código:
+
+```{r}
+
+# Variable nueva: Gasto de transporte hasta el destino por persona.
+
+golfen$coste_transporte_persona <- coste_transporte / coste_personas
+
+
+# Tabla para el cálculo del precio medio de transporte, para restarlo de la partida de paquete turístico.
+
+tabla_PrecioMedioTrans <- golfen %>%
+group_by(residencia) %>%
+summarise(Media = mean(coste_transporte_persona), Personas = sum(coste_personas), Cuestionarios = n()) %>%
+mutate(MediaxPersona = Media * Personas)
+tabla_PrecioMedioTrans
+
+# Calcular el precio medio:
+
+tbl_temp <- golfen %>%
+filter(residencia != "Andalucía") %>%
+group_by(residencia) %>%
+summarise(Media = mean(coste_transporte_persona), Personas = sum(coste_personas), Cuestionarios = n()) %>%
+mutate(MediaxPersona = Media * Personas)
+as.data.frame(tbl_temp)
+
+PrecioMedio <- sum(tbl_temp$MediaxPersona) / sum(tbl_temp$Personas)
+PrecioMedio
+
+```
+
+Creamos la variable coste_paquete_sintransporte, restándole PrecioMedio. 
+Si es andaluz y viene con paquete, no se le resta.
+
+```{r}
+
+golfen$coste_paquete_sintransporte <- as.numeric(ifelse((golfen$residencia != "Andalucía" & golfen$coste_paquete > 0), (coste_paquete - PrecioMedio), coste_paquete))
+
+```
+
+Creamos la variable coste_transporte_andaluces, que refleja el transporte hasta el lugar de destino, 
+con valores solo para andaluces, porque el resto es en orígen (0). 
+
+```{r}
+
+golfen$coste_transporte_andaluces <- as.numeric(ifelse((golfen$residencia == "Andalucía"), golfen$coste_transporte, 0))
+
+```
+
+Creamos variable Gasto de la estancia sumando todas las partidas coste_ (P05), 
+cambiando las dos que hemos ajustado: Transporte solo de andaluces y Paquete sin Transporte.
+
+```{r}
+
+attach(golfen)
+
+golfen$coste_corregido <- coste_transporte_andaluces + 
+                          coste_alojamiento + coste_restauracion + 
+                          coste_compras + coste_greenfees + 
+                          coste_paquete_sintransporte + coste_otros
+
+#sin paquete:
+
+golfen$coste_sinpaquete <- coste_transporte_andaluces + 
+                           coste_alojamiento + coste_restauracion + 
+                           coste_compras + coste_greenfees + coste_otros
+
+```
+
+Creamos variable Gasto de la estancia por cuestionario: dividiendo por persona y día.
+
+```{r}
+
+attach(golfen)
+golfen$coste_cuestionario <- coste_corregido / coste_personas / pernoctaciones
+
+# sin paquete: 
+
+golfen$coste_cuestionario_sinpaquete <- coste_sinpaquete / coste_personas / pernoctaciones
+
+```
+
+Creamos variable Gasto día de ayer por persona.
+
+```{r}
+
+golfen$gastoayer_porpersona <- gastoayer / gastoayer_personas
+
+```
+
+Creamos variable Gasto cuestionario: por día y persona, sumando coste_cuestionario y gastoayer_porpersona.
+
+```{r}
+
+attach(golfen)
+
+golfen$gasto_cuestionario <- coste_cuestionario + gastoayer_porpersona
+
+# sin paquete:
+
+golfen$gasto_cuestionario_sinpaquete <- coste_cuestionario_sinpaquete + gastoayer_porpersona
+
+```
+
+Calculamos coste de la estancia por día
+
+```{r}
+
+golfen$coste_corregido_pordia <- coste_corregido / pernoctaciones
+
+# sin paquete:
+
+golfen$coste_sinpaquete_pordia <- coste_sinpaquete / pernoctaciones
+
+```
+
+Cálculos del Gasto Medio Diario con metodología antigua
+
+```{r}
+
+golfen %>%
+  summarise(Gasto_Estancia = sum(coste_corregido_pordia) / sum(coste_personas), 
+            Gasto_Ayer = sum(gastoayer) / sum(gastoayer_personas), Total = Gasto_Estancia +
+            Gasto_Ayer)
+
+```
+
+# Cálculo del gasto medio diario con metodología ECTA
+
+```{r}
+
+# Sin filtros
+  
+golfen$ecta_gasto_estancia_dia_persona <- ((coste_sinpaquete / pernoctaciones) / coste_personas)
+
+golfen$ecta_gasto_ayer_persona <- gastoayer / gastoayer_personas
+
+
+tabla_gmdecta_sinfiltrar <- golfen %>% 
+  summarise (ecta_numerador = sum(((ecta_gasto_estancia_dia_persona + 
+                                    ecta_gasto_ayer_persona) * pernoctaciones) * 
+                                    coste_personas), ecta_denominador = sum(coste_personas *
+                                    pernoctaciones), gmd = ecta_numerador / ecta_denominador)
+tabla_gmdecta_sinfiltrar  
+  
+# Filtrando:
+
+attach(golfen)
+
+filtro_inf <- 0
+filtro_sup <- 300
+   
+golfen_filtrado <- golfen[gasto_cuestionario_sinpaquete >= filtro_inf & 
+                          gasto_cuestionario_sinpaquete <= filtro_sup &
+                          pernoctaciones < 30, ] # se usa el mismo filtro que el año pasado
+
+attach(golfen_filtrado)
+
+golfen_filtrado$ecta_gasto_estancia_dia_persona <- ((coste_sinpaquete / pernoctaciones) / coste_personas)
+
+golfen_filtrado$ecta_gasto_ayer_persona <- gastoayer / gastoayer_personas
+
+
+tabla_gmdecta_filtrado <- golfen_filtrado %>% 
+summarise (ecta_numerador = sum(((ecta_gasto_estancia_dia_persona + 
+                                  ecta_gasto_ayer_persona) * pernoctaciones) *
+                                  coste_personas), ecta_denominador = sum(coste_personas *
+                                  pernoctaciones), gmd = ecta_numerador / ecta_denominador)
+tabla_gmdecta_filtrado
+
+detach(golfen_filtrado)
+
+```
+
+Calculamos el gasto por concepto.
+Pasamos el coste de la estancia a un dato diario para cada concepto:
+
+```{r}
+
+attach(golfen)
+
+golfen$coste_transporte_andaluces_dia <- coste_transporte_andaluces / pernoctaciones
+golfen$coste_alojamiento_dia <- coste_alojamiento / pernoctaciones
+golfen$coste_restauracion_dia <- coste_restauracion / pernoctaciones
+golfen$coste_compras_dia <- coste_compras / pernoctaciones
+golfen$coste_greenfees_dia <- coste_greenfees / pernoctaciones
+
+```
+
+Sumamos coste estancia diario con los gastos en el día de ayer, por conceptos:
+
+```{r}
+
+attach(golfen)
+
+golfen$concepto_transporte <- coste_transporte_andaluces_dia + gastoayer_transporte
+golfen$concepto_alojamiento <- coste_alojamiento_dia + gastoayer_alojamiento
+golfen$concepto_restauracion <- coste_restauracion_dia + gastoayer_restauracion
+golfen$concepto_compras <- coste_compras_dia + gastoayer_compras
+golfen$concepto_greenfees <- coste_greenfees_dia + gastoayer_greenfees
+
+```
+
+Y tabulamos en valores absolutos y en porcentajes sobre el total de gasto diario
+
+```{r}
+
+golfen %>%
+  summarise(Transporte = sum(concepto_transporte),
+            Alojamiento = sum(concepto_alojamiento),
+            Restauracion = sum(concepto_restauracion),
+            Compras = sum(concepto_compras),
+            Greenfees = sum(concepto_greenfees))
+
+attach(golfen)
+
+GastoDiarioTotal <- sum(concepto_transporte + concepto_alojamiento +
+                        concepto_restauracion + concepto_compras + 
+                        concepto_greenfees)
+
+tabla_gastoconceptos <- golfen %>%
+  summarise(Transporte = sum((concepto_transporte) / GastoDiarioTotal) * 100,
+            Alojamiento = sum((concepto_alojamiento) / GastoDiarioTotal) * 100,
+            Restauracion = sum((concepto_restauracion) / GastoDiarioTotal)* 100,
+            Compras = sum((concepto_compras) / GastoDiarioTotal) * 100,
+            Greenfees = sum((concepto_greenfees) / GastoDiarioTotal) * 100)
+
+tabla_gastoconceptos
+
+```
+
+**Escribir las tablas en Excel**
+
+```{r}
+
+save.xlsx("Z:/SAETA/Segmentos/Sistema Actualizacion Anual/2015/Golf/golf15_Rtables.xlsx", golfen, encuestasyconteo, encuestasyconteoMeses, encuestasMeses, encuestasMesesPuntos, residencia, motivo1, motivo2, tabla_em, em_residencia, valoración, campos, tabla_salidas, viajes, socio, usointernet, sexo, tabla_PrecioMedioTrans, PrecioMedio, tabla_gmdecta_sinfiltrar, tabla_gmdecta_filtrado, tabla_gastoconceptos)
+
+```
+
+Notas finales:
+
+- He comprobado que todo está correcto haciendo la explotación en SPSS.
+
+Retos pendientes:
+
+- Análisis de valores extremos
+
+boxplot(golfen$pernoctaciones)
+boxplot.stats(golfen$pernoctaciones)
+
+- Tratamiento conjunto de encuestas de varios años.
+
+
+
+
+
+
+
+
+
+
