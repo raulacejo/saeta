@@ -1,0 +1,833 @@
+---
+title: "internet15"
+author: "Raúl Acejo - SAETA"
+date: "17 de mayo de 2016"
+output: pdf_document
+---
+
+***DESCRIPCIÓN***
+
+Este documento recoge la explotación en R de la encuesta Segmento de Internet en Andalucía del año 2015. Hasta ahora se viene recibiendo la información en tablas de SPSS y Access, y se explotaba en SPSS. Esto es una prueba piloto para la utilización de R en el proceso completo de explotar la información, generar las variables necesarias y obtener las tablas adecuadas para la redacción del informe.
+
+***PAQUETES REQUERIDOS***
+
+Incluimos aquí los paquetes que nos harán falta en la explotación y los cargamos (o los instalamos si no están):
+
+```{r}
+
+library(data.table)
+library(xlsx)
+library(foreign)
+library(memisc)
+library(plyr) # Ojo que interfiere en tablas con dplyr y n() así que se activa/desactiva por necesidades. Aunque parece que si se carga plyr antes que dplyr no dá problemas.
+library(dplyr)
+
+```
+
+***LECTURA, DEPURACIÓN Y TRATAMIENTO DE MICRODATOS***
+
+La primera opción es partir de la tabla de datos en SPSS, convertirla en un archivo de texto separado por comas, aunque realmente los separadores que usa SPSS en la exportación son ; (internet2014.csv). No se exportan las variables creadas en el proceso SPSS, solo las originales.
+
+Guardamos en un dataset (data) el archivo de datos, usando la función `read.spss` del paquete foreign:
+
+```{r}
+
+archivo <- ("Z:/SAETA/Segmentos/Sistema Actualizacion Anual/2015/Internet/R/internet15_data-R-Test.sav")
+data <- read.spss(archivo, use.value.labels = TRUE, to.data.frame = TRUE,
+          max.value.labels = Inf, trim.factor.names = FALSE,
+          trim_values = TRUE, reencode = NA, use.missings = to.data.frame)
+
+# Se puede usar file.choose() como source si queremos que nos pregunte el archivo a abrir
+
+```
+
+Al usar este paquete obtenemos algunos errores (__Truncated__), por lo que buscamos alternativas. 
+Una de ellas es usar el paquete 'memisc':
+
+
+```{r}
+#Borramos el dataframe de la importación anterior: data
+rm(data)
+
+#Importamos usando memisc
+dataspss <- spss.system.file(archivo)
+dataset <- as.data.set(dataspss)
+dataframe <- as.data.frame(dataset)
+datatbl <- tbl_df(dataframe)
+
+```
+
+El segundo paso es renombrar y establecer el tipo correcto de cada variable. Esto se puede hacer usando la función `fix()`. Esta opción es sencilla y visual pero tiene algunas limitaciones, por ejemplo con el formato fecha. Además, no es reproducible, si no tenemos el código, cada año habrá que hacer la edición y no es lo que queremos. Por tanto, es mejor usar código para el tratamiento de las variables. 
+
+Al cargar directamente el SPSS con spss.system.file() las variables conservan sus características, por lo que no es necesario ajustar el tipo de variable, los factores, las etiquetas, etc. 
+
+Lo que sí hay que ajustar es la variable fecha. Para ello hay que tener en cuenta: 
+
+> Dates in SPSS are recorded in seconds since October 14, 1582, the date of the beginning of the Julian 
+> calendar. To transform the value to the R "Date" format, you simply need to turn seconds into days and
+> specify the origin.
+
+Por tanto usamos la función 'spss2date' y se la aplicamos a dataset$fecha.
+
+```{r}
+
+spss2date <- function(x) as.Date(x/86400, origin = "1582-10-14")
+datatbl$fecha <- spss2date(datatbl$fecha)
+
+#Despues renombramos las variables a nuestros gusto, con la funciÃ³n rename del propio paquete memisc.
+
+data <- memisc::rename(datatbl,
+       contador = "contador",
+       segmento = "segmento",
+       id = "id",
+       codpto = "codpunto",
+       descpto = "descpunto",
+       encuestador = "encuestador",
+       fecha = "fecha",
+       horaentrevista = "hora",
+       enc_conteo = "encuestado",
+       tvisitante = "tipovisitante",
+       resp01 = "pernocto",
+       resp01a = "primerdia",
+       resp02_a = "usoint",
+       resp02_b = "nousoint",
+       resp02_b_otros = "nousoint_otros",
+       resp03 = "sexo",
+       resp04 = "edad",
+       resp05a = "residencia",
+       resp05a_otros = "residencia_otros",
+       resp05b = "andaluz",
+       p06_op01 = "fuente_guias",
+       p06_op05 = "fuente_agencia",
+       p06_op08 = "fuente_amigos_pers",
+       p06_op07 = "fuente_amigos_internet",
+       p06_op06 = "fuente_viajeros_internet",
+       p06_op13 = "fuente_portales_comparadores",
+       p06_op11 = "fuente_web_oficial",
+       p06_opotras = "fuente_otras",
+       p06_op15 = "fuente_ninguna",
+       p06_otras = "fuente_otras_ind",
+       p07a_op1 = "fotos_durante",
+       p07a_op2 = "geolocalizar_durante",
+       p07a_op3 = "comentarios_durante",
+       p07b_op1 = "fotos_despues",
+       p07b_op3 = "comentarios_despues",
+       p08_op01 = "uso_facebook",
+       p08_op02 = "uso_twitter",
+       p08_op03 = "uso_instagram",
+       p08_op04 = "uso_whatsapp",
+       p08_op05 = "uso_youtube",
+       p08_op06 = "uso_foursquare",
+       p08_op07 = "uso_google",
+       p08_op08 = "uso_tripadvisor",
+       p08_op09 = "uso_booking",
+       p08_opotros = "uso_otros",
+       p08_otros = "uso_otros_ind",
+       p09 = "weboficial",
+       p09_si_otros = "weboficial_otros",
+       p09_no_otros = "weboficial_no",
+       p10a = "smartphone",
+       p10b = "smartphone_no",
+       p10_otros = "smartphone_no_otros",
+       p11_op1 = "smart_escogerdestino",
+       p11_op2 = "smart_quever",
+       p11_op3 = "smart_dondedormir", 
+       p11_op4 = "smart_dondecomer",
+       p11_op5 = "smart_buscarviajeros",
+       p11_op6 = "smart_traslados",
+       p11_op7 = "smart_entradas",
+       p11_op8 = "smart_agenciaslocales",
+       p11_op9 = "smart_otras",
+       p11_otros = "smart_otras_ind",
+       p12a_op1 = "smart_fotos_durante",
+       p12a_op2 = "smart_geolocalizar_durante",
+       p12a_op3 = "smart_comentarios_durante",
+       p12a_op4 = "smart_apps_durante",
+       p12a_op5 = "smart_realidad_durante",
+       p12a_op6 = "smart_qr_durante",
+       p12b_op1 = "smart_fotos_despues",
+       p12b_op3 = "smart_comentarios_despues",
+       p13_op1 = "smart_ventaja_informacion_tiemporeal",
+       p13_op2 = "smart_ventaja_rapidez",
+       p13_op3 = "smart_ventaja_comodidad",
+       p13_op4 = "smart_ventaja_conectado",
+       p13_op5 = "smart_ventaja_adaptarplanes",
+       p13_op6 = "smart_ventaja_soluciones_tiemporeal",
+       p13_op7 = "smart_ventaja_mapas",
+       p13_op8 = "smart_ventaja_entretenimiento",
+       p13_op9 = "smart_ventaja_redessociales",
+       p13_op10 = "smart_ventaja_otras",
+       p13_otros = "smart_ventaja_otras_ind",
+       p14_op1 = "smart_desventaja_ninguna",
+       p14_op2 = "smart_desventaja_tarifas_caras",
+       p14_op3 = "smart_desventaja_lentitud",
+       p14_op4 = "smart_desventaja_cobertura",
+       p14_op5 = "smart_desventaja_puntoswifi",
+       p14_op6 = "smart_desventaja_pantalla",
+       p14_op7 = "smart_desventaja_adaptacion_webs",
+       p14_op8 = "smart_desventaja_otras",
+       p14_otros = "smart_desventaja_otras_ind",
+       email = "email")
+
+```
+
+Haciendo uso del paquete `dplyr` realizamos la primera tabla:
+
+```{r}
+
+# Total de encuestas y conteo
+
+data %>%
+group_by(encuestado) %>%
+summarise(Cuestionarios = n())
+
+```
+
+Creamos una nueva variable que recoja el mes de realización de la encuesta:
+
+
+```{r}
+
+data$mes <- month(data$fecha)
+data$mes <- factor(data$mes, levels = c(4,5,6,7,8,9,10,11), labels = c("Abr","May","Jun","Jul","Ago","Sep","Oct", "Nov"))
+
+```
+
+Y agrupamos las encuestas por meses:
+
+```{r}
+
+data %>%
+group_by(mes) %>%
+summarise(Encuestas = n())
+
+```
+
+Creamos un nuevo dataset solo con los registros de encuestas, quitando los conteos y comprobamos el número de cuestionarios:
+
+```{r}
+dataen <- filter(data, encuestado == "Registro de Encuesta")
+
+dataen %>%
+summarise(Cuestionarios = n())
+
+dataen %>%
+group_by(encuestado) %>%
+summarise(Cuestionarios = n())
+
+dataen %>%
+group_by(mes) %>%
+summarise(Encuestas = n()) 
+
+```
+
+Distribución de encuestas por puntos de encuestación y meses, para comprobar la muestra:
+
+```{r}
+addmargins(table(dataen$descpunto, dataen$mes))
+```
+
+Creación de variable trimestre y tabla de encuestas por trimestre:
+
+```{r}
+dataen$trimestre <- quarter(dataen$fecha)
+dataen$trimestre <- factor(dataen$trimestre,levels = c(2,3,4), labels = c("2T","3T","4T"))
+addmargins(table(dataen$descpunto, dataen$trimestre))
+```
+
+Creación de variable dicotómica españoles/extranjeros:
+
+```{r}
+dataen$espext <- as.factor(ifelse((as.integer(dataen$residencia)) != 1, c("ext"), c("esp")))
+```
+
+Creación de variable zonaencuesta y tabla de encuestas por trimestre:
+
+```{r}
+dataen$zonaencuesta <- revalue(dataen$codpunto, c("ZC0402"="litoral",
+                                                  "ZC1113"="litoral", 
+                                                  "ZC1802"="litoral", 
+                                                  "ZC2105"="litoral", 
+                                                  "ZC2913"="litoral", 
+                                                  "ZI1801"="interior", 
+                                                  "ZI2304"="interior", 
+                                                  "ZI2903"="interior",
+                                                  "CP1402"="capitales",
+                                                  "CP4111"="capitales",
+                                                  "CP1807"="capitales"))
+
+addmargins(table(dataen$espext, dataen$zonaencuesta, dataen$trimestre))
+```
+
+
+***PONDERADORES***
+
+Crear la variable pondtotal en función de las condiciones de espext y zonaencuesta:
+
+```{r}
+
+dataen$pondtotal <- as.numeric(ifelse((dataen$espext == "esp" & dataen$zonaencuesta == "litoral"), 1.2443, 
+                    ifelse((dataen$espext == "esp" & dataen$zonaencuesta == "interior"), 1.57469, 
+                    ifelse((dataen$espext == "esp" & dataen$zonaencuesta == "capitales"), 1.8536,
+                    ifelse((dataen$espext == "ext" & dataen$zonaencuesta == "litoral"), 0.5369,
+                    ifelse((dataen$espext == "ext" & dataen$zonaencuesta == "interior"), 0.5610, 0.7143)))))) 
+
+```
+
+Algunas tablas para comprobar la distribución de los cuestionarios sin ponderar y una vez ponderados: 
+
+```{r}
+
+dataen %>%
+group_by(espext, zonaencuesta, trimestre) %>%
+summarise(n = n()) %>%
+mutate(pct=100*n/sum(n))
+  
+dataen %>%
+group_by(espext, zonaencuesta) %>%
+tally(wt = pondtotal) %>%
+mutate(pct=100*n/sum(n))
+
+```
+
+
+***EXPLOTACIÓN Y TABULACIÓN DE RESULTADOS***
+
+**Sexo** 
+
+```{r}
+
+# PONDERADA
+
+dataen %>%
+group_by(sexo) %>%
+tally(wt = pondtotal) %>%
+mutate(pct=100*n/sum(n))
+
+```
+
+**Edad** 
+
+```{r}
+
+# PONDERADA
+
+dataen %>%
+  group_by(edad) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+```
+
+**País de residencia** 
+
+```{r}
+
+# PONDERADA
+
+dataen %>%
+  group_by(residencia) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+```
+
+
+**Andaluces / Resto de España** 
+
+
+```{r}
+
+# PONDERADA
+
+dataen %>%
+  filter(!is.na(andaluz)) %>%
+  group_by(andaluz) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+```
+
+
+**Fuente de información** 
+
+
+```{r}
+
+# PONDERADA
+
+tabla_fuente_guias <- dataen %>%
+  filter(!is.na(fuente_guias)) %>%
+  group_by(fuente_guias) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_agencias <- dataen %>%
+  filter(!is.na(fuente_agencia)) %>%
+  group_by(fuente_agencia) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_amigos_pers <- dataen %>%
+  filter(!is.na(fuente_amigos_pers)) %>%
+  group_by(fuente_amigos_pers) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_amigos_internet <- dataen %>%
+  filter(!is.na(fuente_amigos_internet)) %>%
+  group_by(fuente_amigos_internet) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_viajeros_internet <- dataen %>%
+  filter(!is.na(fuente_viajeros_internet)) %>%
+  group_by(fuente_viajeros_internet) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_portales_comparadores <- dataen %>%
+  filter(!is.na(fuente_portales_comparadores)) %>%
+  group_by(fuente_portales_comparadores) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_web_oficial <- dataen %>%
+  filter(!is.na(fuente_web_oficial)) %>%
+  group_by(fuente_web_oficial) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_otras <- dataen %>%
+  filter(!is.na(fuente_otras)) %>%
+  group_by(fuente_otras) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente_ninguna <- dataen %>%
+  filter(!is.na(fuente_ninguna)) %>%
+  group_by(fuente_ninguna) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_fuente <- t(cbind.data.frame(tabla_fuente_guias, tabla_fuente_agencias, tabla_fuente_amigos_pers, tabla_fuente_amigos_internet, tabla_fuente_viajeros_internet, tabla_fuente_portales_comparadores, tabla_fuente_web_oficial, tabla_fuente_otras, tabla_fuente_ninguna ))
+
+tabla_fuente
+
+```
+
+
+**Actividades durante el viaje** 
+
+```{r}
+
+tabla_fotos_durante <- dataen %>%
+  filter(!is.na(fotos_durante)) %>%
+  group_by(fotos_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_geolocalizar_durante <- dataen %>%
+  filter(!is.na(geolocalizar_durante)) %>%
+  group_by(geolocalizar_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_comentarios_durante <- dataen %>%
+  filter(!is.na(comentarios_durante)) %>%
+  group_by(comentarios_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_durante <- t(cbind.data.frame(tabla_fotos_durante, tabla_geolocalizar_durante, tabla_comentarios_durante))
+
+tabla_durante
+
+
+```
+
+**Actividades después del viaje** 
+
+```{r}
+
+tabla_fotos_despues <- dataen %>%
+  filter(!is.na(fotos_despues)) %>%
+  group_by(fotos_despues) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_comentarios_despues <- dataen %>%
+  filter(!is.na(comentarios_despues)) %>%
+  group_by(comentarios_despues) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_despues <- t(cbind.data.frame(tabla_fotos_despues, tabla_comentarios_despues))
+tabla_despues
+
+```
+
+
+**Medios sociales utilizados en relación al viaje** 
+
+```{r}
+
+tabla_uso_facebook <- dataen %>%
+  filter(!is.na(uso_facebook)) %>%
+  group_by(uso_facebook) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_twitter <- dataen %>%
+  filter(!is.na(uso_twitter)) %>%
+  group_by(uso_twitter) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_instagram <- dataen %>%
+  filter(!is.na(uso_instagram)) %>%
+  group_by(uso_instagram) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_whatsapp <- dataen %>%
+  filter(!is.na(uso_whatsapp)) %>%
+  group_by(uso_whatsapp) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_youtube <- dataen %>%
+  filter(!is.na(uso_youtube)) %>%
+  group_by(uso_youtube) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_foursquare <- dataen %>%
+  filter(!is.na(uso_foursquare)) %>%
+  group_by(uso_foursquare) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_google <- dataen %>%
+  filter(!is.na(uso_google)) %>%
+  group_by(uso_google) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_tripadvisor <- dataen %>%
+  filter(!is.na(uso_tripadvisor)) %>%
+  group_by(uso_tripadvisor) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_booking <- dataen %>%
+  filter(!is.na(uso_booking)) %>%
+  group_by(uso_booking) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_uso_otros <- dataen %>%
+  filter(!is.na(uso_otros)) %>%
+  group_by(uso_otros) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_medios <- t(cbind.data.frame(tabla_uso_facebook, tabla_uso_twitter, tabla_uso_instagram, tabla_uso_whatsapp, tabla_uso_youtube, tabla_uso_foursquare, tabla_uso_google, tabla_uso_tripadvisor, tabla_uso_booking, tabla_uso_otros))
+
+tabla_medios
+
+```
+
+**Web oficial: andalucia.org** 
+
+```{r}
+
+tabla_weboficial <- dataen %>%
+  filter(!is.na(weboficial)) %>%
+  group_by(weboficial) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+
+tabla_weboficial
+
+```
+
+**Uso Internet en smartphone** 
+
+```{r}
+
+tabla_smartphone <- dataen %>%
+  filter(!is.na(smartphone)) %>%
+  group_by(smartphone) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+
+tabla_smartphone
+
+```
+
+**Por qué no usó Internet en smartphone** 
+
+```{r}
+
+tabla_smartphone_no <- dataen %>%
+  filter(!is.na(smartphone_no)) %>%
+  group_by(smartphone_no) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smartphone_no
+
+```
+
+
+**Tipo de Uso Internet en smartphone** 
+
+```{r}
+
+tabla_smart_escogerdestino <- dataen %>%
+  group_by(smart_escogerdestino) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_escogerdestino
+
+tabla_smart_quever <- dataen %>%
+  group_by(smart_quever) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_dondedormir <- dataen %>%
+  group_by(smart_dondedormir) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_dondecomer <- dataen %>%
+  group_by(smart_dondecomer) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_buscarviajeros <- dataen %>%
+  group_by(smart_buscarviajeros) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_traslados <- dataen %>%
+  group_by(smart_traslados) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_entradas <- dataen %>%
+  group_by(smart_entradas) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_agenciaslocales <- dataen %>%
+  group_by(smart_agenciaslocales) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_otras <- dataen %>%
+  group_by(smart_otras) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+
+tabla_uso_smartphone <- t(cbind.data.frame(tabla_smart_escogerdestino, tabla_smart_quever, tabla_smart_dondedormir, tabla_smart_dondecomer, tabla_smart_buscarviajeros, tabla_smart_traslados, tabla_smart_entradas, tabla_smart_agenciaslocales, tabla_smart_otras))
+
+tabla_uso_smartphone
+
+```
+
+**Uso Internet en smartphone durante el viaje** 
+
+```{r}
+
+tabla_smart_fotos_durante <- dataen %>%
+  group_by(smart_fotos_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_geolocalizar_durante <- dataen %>%
+  group_by(smart_geolocalizar_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_comentarios_durante <- dataen %>%
+  group_by(smart_comentarios_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_apps_durante <- dataen %>%
+  group_by(smart_apps_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_realidad_durante <- dataen %>%
+  group_by(smart_realidad_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_qr_durante <- dataen %>%
+  group_by(smart_qr_durante) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smartphone_durante <- t(cbind.data.frame(tabla_smart_fotos_durante, tabla_smart_geolocalizar_durante, tabla_smart_comentarios_durante, tabla_smart_apps_durante, tabla_smart_realidad_durante, tabla_smart_qr_durante))
+
+tabla_smartphone_durante
+
+```
+       
+   
+**Uso Internet en smartphone despues del viaje** 
+
+```{r}
+
+tabla_smart_fotos_despues <- dataen %>%
+  group_by(smart_fotos_despues) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_comentarios_despues <- dataen %>%
+  group_by(smart_comentarios_despues) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smartphone_despues <- t(cbind.data.frame(tabla_smart_fotos_despues, tabla_smart_comentarios_despues))
+
+tabla_smartphone_despues
+
+```
+
+
+**Ventajas del uso Internet en smartphone en el viaje** 
+
+```{r}
+
+tabla_smart_ventaja_informacion_tiemporeal <- dataen %>%
+  group_by(smart_ventaja_informacion_tiemporeal) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_rapidez <- dataen %>%
+  group_by(smart_ventaja_rapidez) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_comodidad <- dataen %>%
+  group_by(smart_ventaja_comodidad) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_conectado <- dataen %>%
+  group_by(smart_ventaja_conectado) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_adaptarplanes <- dataen %>%
+  group_by(smart_ventaja_adaptarplanes) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_soluciones_tiemporeal <- dataen %>%
+  group_by(smart_ventaja_soluciones_tiemporeal) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_mapas <- dataen %>%
+  group_by(smart_ventaja_mapas) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_entretenimiento <- dataen %>%
+  group_by(smart_ventaja_entretenimiento) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_redessociales <- dataen %>%
+  group_by(smart_ventaja_redessociales) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_ventaja_otras <- dataen %>%
+  group_by(smart_ventaja_otras) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+
+tabla_smartphone_ventajas <- t(cbind.data.frame(tabla_smart_ventaja_informacion_tiemporeal,
+tabla_smart_ventaja_rapidez,
+tabla_smart_ventaja_comodidad,
+tabla_smart_ventaja_conectado,
+tabla_smart_ventaja_adaptarplanes,
+tabla_smart_ventaja_soluciones_tiemporeal,
+tabla_smart_ventaja_mapas,
+tabla_smart_ventaja_entretenimiento,
+tabla_smart_ventaja_redessociales,
+tabla_smart_ventaja_otras))
+
+tabla_smartphone_ventajas
+
+```
+
+
+**Desventajas del uso Internet en smartphone en el viaje** 
+
+```{r}
+
+tabla_smart_desventaja_ninguna <- dataen %>%
+  group_by(smart_desventaja_ninguna) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_tarifas_caras <- dataen %>%
+  group_by(smart_desventaja_tarifas_caras) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_lentitud <- dataen %>%
+  group_by(smart_desventaja_lentitud) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_cobertura <- dataen %>%
+  group_by(smart_desventaja_cobertura) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_puntoswifi <- dataen %>%
+  group_by(smart_desventaja_puntoswifi) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_pantalla <- dataen %>%
+  group_by(smart_desventaja_pantalla) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_adaptacion_webs <- dataen %>%
+  group_by(smart_desventaja_adaptacion_webs) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+tabla_smart_desventaja_otras <- dataen %>%
+  group_by(smart_desventaja_otras) %>%
+  tally(wt = pondtotal) %>%
+  mutate(pct=100*n/sum(n))
+
+
+tabla_smartphone_desventajas <- t(cbind.data.frame(tabla_smart_desventaja_ninguna,
+tabla_smart_desventaja_tarifas_caras,
+tabla_smart_desventaja_lentitud,
+tabla_smart_desventaja_cobertura,
+tabla_smart_desventaja_puntoswifi,
+tabla_smart_desventaja_pantalla,
+tabla_smart_desventaja_adaptacion_webs,
+tabla_smart_desventaja_otras))
+
+tabla_smartphone_desventajas
+
+```
